@@ -116,6 +116,57 @@ INSIGHT_HEAVY_VIEWS: set[str] = {
 }
 
 
+
+# ============================================================
+# [PATCH] 자사 데이터(user) 모드에서 Treatment/Control 의존
+# 화면을 "해당 데이터 없음" 으로 처리하는 헬퍼.
+# 외부 데이터(UCI / Retailrocket 등)에는 처치/대조 정보가 없어
+# Uplift, A/B 테스트, 예산 최적화 등을 산출할 수 없기 때문.
+# ============================================================
+def _user_mode_unavailable(feature_name: str, reason: str = "") -> bool:
+    """현재 자사 데이터 모드면 '데이터 없음' 박스를 그리고 True 반환.
+    시뮬레이터 모드면 False 반환 (원래 화면 그대로 진행)."""
+    import streamlit as _st
+    _mode = _st.session_state.get("data_mode", "simulator")
+    if _mode != "user":
+        return False
+    _default_reason = (
+        "외부 자사 데이터에는 Treatment/Control(처치·대조군) 배정 정보가 "
+        "없어 이 항목은 산출할 수 없습니다."
+    )
+    _reason = reason or _default_reason
+    _st.markdown(
+        f"""
+        <div style="
+            background-color: #F3F4F6;
+            border: 1px dashed #9CA3AF;
+            border-radius: 12px;
+            padding: 32px 24px;
+            margin: 16px 0;
+            text-align: center;
+        ">
+            <div style="font-size: 40px; opacity: 0.5;">🔒</div>
+            <div style="font-size: 20px; font-weight: 700; color: #374151; margin-top: 8px;">
+                해당 데이터 없음
+            </div>
+            <div style="font-size: 14px; color: #6B7280; margin-top: 8px;">
+                {feature_name}
+            </div>
+            <div style="font-size: 13px; color: #9CA3AF; margin-top: 12px; line-height: 1.5;">
+                {_reason}
+            </div>
+            <div style="font-size: 12px; color: #9CA3AF; margin-top: 12px; font-style: italic;">
+                💡 사이드바에서 'Simulator 데모' 모드로 전환하면 확인할 수 있습니다.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    return True
+# ============================================================
+# [/PATCH]
+# ============================================================
+
 def _circled_num(n: str) -> str:
     try:
         i = int(n)
@@ -2812,6 +2863,8 @@ elif view == "2. 코호트 리텐션 곡선":
     }
 
 elif view == "3. Uplift + CLV 상위 고객":
+    if _user_mode_unavailable("Uplift Score + CLV 상위 고객 분석", "외부 자사 데이터에는 Treatment/Control 배정 정보가 없어 Uplift Score 계산이 불가합니다."):
+        st.stop()
     st.subheader("Uplift Score + CLV 상위 고가치 고객 목록")
 
     plot_df = top_customers.head(min(len(top_customers), 500)).copy()
@@ -2882,6 +2935,8 @@ elif view == "3. Uplift + CLV 상위 고객":
     }
 
 elif view == "4. 예산 배분 결과":
+    if _user_mode_unavailable("예산 배분 결과 (세그먼트별 배분)", "예산 배분은 Uplift 세그먼트(Persuadables 등)를 기반으로 하며, 외부 데이터에는 Treatment 정보가 없어 산출 불가합니다."):
+        st.stop()
     st.subheader("예산 배분 결과")
     st.caption("이 화면은 저장된 optimize 결과 파일이 아니라 현재 입력값으로 다시 계산한 결과입니다.")
 
@@ -2959,6 +3014,8 @@ elif view == "4. 예산 배분 결과":
     }
 
 elif view == "5. 예상 최적화 ROI":
+    if _user_mode_unavailable("예상 최적화 ROI", "ROI 계산은 Uplift 기반 증분 이익 추정이 필요한데, 외부 데이터에는 Treatment 정보가 없어 산출 불가합니다."):
+        st.stop()
     st.subheader("예상 최적화 ROI")
     st.caption("이 화면도 현재 입력값 기준의 실시간 재계산 결과입니다.")
 
@@ -3020,6 +3077,8 @@ elif view == "5. 예상 최적화 ROI":
     }
 
 elif view == "6. 리텐션 대상 고객 목록":
+    if _user_mode_unavailable("리텐션 대상 고객 목록", "최종 리텐션 타겟 선정은 Uplift Score + 예산 최적화에 의존하며, 외부 데이터로는 산출 불가합니다."):
+        st.stop()
     st.subheader("리텐션 대상 고객 목록")
     st.caption("현재 budget / threshold / 최대 타겟 고객 수 조건에서 실제로 마케팅 대상으로 선정된 전체 고객을 보여줍니다.")
 
@@ -3179,6 +3238,8 @@ elif view == "7. 학습 결과 아티팩트":
     }
 
 elif view == "8. Uplift/최적화 결과 (실시간)":
+    if _user_mode_unavailable("Uplift / 최적화 실시간 결과", "외부 자사 데이터에는 Treatment/Control 배정 정보가 없어 Uplift 학습과 최적화가 불가합니다."):
+        st.stop()
     st.subheader("Uplift/최적화 결과 (실시간)")
     st.caption("Uplift 결과는 최신 raw 데이터를 기준으로 필요 시 다시 만들고, 최적화 결과는 현재 budget/threshold/max-customers 조건으로 즉시 다시 계산합니다.")
     rebuild_saved_results = st.button("현재 조건으로 Uplift/최적화 다시 계산", key="rebuild_saved_results")
@@ -3871,6 +3932,8 @@ elif view == "13. 운영 한눈에 보기":
     }
 
 elif view == "14. 증분 성과 / A-B 실험":
+    if _user_mode_unavailable("증분 성과 / A-B 실험 분석", "A/B 테스트 분석은 Treatment/Control 그룹 분리 데이터가 필수이며, 외부 데이터에는 해당 정보가 없습니다."):
+        st.stop()
     st.subheader("증분 성과 / A-B 실험")
     st.caption("정확도보다 더 중요한 운영 지표인 증분 리텐션, 추가 유지 고객 수, 비용 대비 유지 성과, dose-response 결과를 함께 봅니다.")
 
